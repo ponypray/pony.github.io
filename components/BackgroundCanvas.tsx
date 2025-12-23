@@ -11,20 +11,82 @@ const BackgroundCanvas: React.FC = () => {
 
     let width = window.innerWidth;
     let height = window.innerHeight;
+    
+    // Entities
     let stars: Star[] = [];
+    let nebulas: Nebula[] = [];
     let meteors: Meteor[] = [];
     let animationFrameId: number;
 
     const config = { 
-      starCount: width < 768 ? 50 : 120, 
-      connectionDistance: 100, 
-      meteorChance: 0.003 
+      starCount: width < 768 ? 60 : 150, 
+      nebulaCount: 5,
+      meteorChance: 0.02, // Increased for visibility
+      connectionDistance: 100 
     };
+
+    // --- CLASSES ---
+
+    class Nebula {
+        x: number = 0;
+        y: number = 0;
+        radius: number = 0;
+        color: string = '';
+        vx: number = 0;
+        vy: number = 0;
+
+        constructor() { this.reset(true); }
+
+        reset(initial = false) {
+            this.x = Math.random() * width;
+            this.y = Math.random() * height;
+            // Large radius for "galaxy" feel
+            this.radius = Math.random() * (width < 768 ? 300 : 600) + 200;
+            
+            // Deep space colors
+            const colors = [
+                'rgba(76, 29, 149, 0.15)', // Deep Violet
+                'rgba(15, 23, 42, 0.8)',   // Dark Slate (Base)
+                'rgba(30, 58, 138, 0.2)',  // Dark Blue
+                'rgba(88, 28, 135, 0.15)', // Purple
+                'rgba(6, 182, 212, 0.05)'  // Faint Cyan
+            ];
+            this.color = colors[Math.floor(Math.random() * colors.length)];
+            
+            // Very slow drift
+            this.vx = (Math.random() - 0.5) * 0.15;
+            this.vy = (Math.random() - 0.5) * 0.15;
+        }
+
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            
+            // Wrap around screen
+            const pad = this.radius;
+            if (this.x < -pad) this.x = width + pad;
+            if (this.x > width + pad) this.x = -pad;
+            if (this.y < -pad) this.y = height + pad;
+            if (this.y > height + pad) this.y = -pad;
+        }
+
+        draw(ctx: CanvasRenderingContext2D) {
+            // Draw a large radial gradient
+            const gradient = ctx.createRadialGradient(this.x, this.y, 0, this.x, this.y, this.radius);
+            gradient.addColorStop(0, this.color);
+            gradient.addColorStop(1, 'rgba(0,0,0,0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
 
     class Star {
       x: number = 0;
       y: number = 0;
-      z: number = 0;
+      z: number = 0; // Depth
       size: number = 0;
       opacity: number = 0;
       vx: number = 0;
@@ -36,15 +98,21 @@ const BackgroundCanvas: React.FC = () => {
         this.x = Math.random() * width;
         this.y = Math.random() * height;
         this.z = Math.random() * width;
-        this.size = (1 - this.z / width) * 1.2 + 0.3;
-        this.opacity = (1 - this.z / width) * 0.7 + 0.1;
-        this.vx = (Math.random() - 0.5) * 0.05;
-        this.vy = (Math.random() - 0.5) * 0.05;
+        
+        // Size depends on depth (closer = bigger)
+        this.size = (1 - this.z / width) * 1.5 + 0.5;
+        this.opacity = (1 - this.z / width) * 0.8 + 0.2;
+        
+        // Parallax movement
+        const speed = 0.05;
+        this.vx = (Math.random() - 0.5) * speed;
+        this.vy = (Math.random() - 0.5) * speed;
       }
       
       update() {
         this.x += this.vx;
         this.y += this.vy;
+        
         if (this.x < 0 || this.x > width) this.vx *= -1;
         if (this.y < 0 || this.y > height) this.vy *= -1;
       }
@@ -69,53 +137,63 @@ const BackgroundCanvas: React.FC = () => {
       constructor() { this.reset(); }
       
       reset() {
-        // Random start position outside visible area
-        const side = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+        // Random start side
+        const side = Math.floor(Math.random() * 4);
+        const padding = 100;
         
         if (side === 0) { // Top
             this.x = Math.random() * width;
-            this.y = -50;
+            this.y = -padding;
         } else if (side === 1) { // Right
-            this.x = width + 50;
+            this.x = width + padding;
             this.y = Math.random() * height;
         } else if (side === 2) { // Bottom
             this.x = Math.random() * width;
-            this.y = height + 50;
+            this.y = height + padding;
         } else { // Left
-            this.x = -50;
+            this.x = -padding;
             this.y = Math.random() * height;
         }
 
-        // Random target inside visible area to ensure it crosses screen
+        // Target a random point within the screen to ensure it crosses
         const targetX = Math.random() * width;
         const targetY = Math.random() * height;
         
         this.angle = Math.atan2(targetY - this.y, targetX - this.x);
         
-        this.length = Math.random() * 80 + 20;
-        this.speed = Math.random() * 10 + 5;
+        this.length = Math.random() * 150 + 50;
+        this.speed = Math.random() * 15 + 8; // Fast
         this.active = true;
-        this.opacity = 1;
+        this.opacity = 0.8 + Math.random() * 0.2;
       }
       
       update() {
         if (!this.active) return;
         this.x += Math.cos(this.angle) * this.speed;
         this.y += Math.sin(this.angle) * this.speed;
+        
+        // Fade out
         this.opacity -= 0.01;
-        // Extended bounds check
-        if (this.y > height + 200 || this.y < -200 || this.x > width + 200 || this.x < -200 || this.opacity <= 0) this.active = false;
+        
+        // Bounds check with buffer
+        if (this.x < -300 || this.x > width + 300 || this.y < -300 || this.y > height + 300 || this.opacity <= 0) {
+            this.active = false;
+        }
       }
       
       draw(ctx: CanvasRenderingContext2D) {
         if (!this.active) return;
+        
         const tailX = this.x - Math.cos(this.angle) * this.length;
         const tailY = this.y - Math.sin(this.angle) * this.length;
+        
         const gradient = ctx.createLinearGradient(this.x, this.y, tailX, tailY);
-        gradient.addColorStop(0, `rgba(0, 242, 255, ${this.opacity})`);
-        gradient.addColorStop(1, `rgba(0, 242, 255, 0)`);
+        gradient.addColorStop(0, `rgba(255, 255, 255, ${this.opacity})`); // Head is white hot
+        gradient.addColorStop(0.2, `rgba(0, 242, 255, ${this.opacity * 0.8})`); // Cyan mid
+        gradient.addColorStop(1, `rgba(0, 242, 255, 0)`); // Tail fade
+        
         ctx.strokeStyle = gradient;
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = 2;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.moveTo(this.x, this.y);
@@ -124,39 +202,56 @@ const BackgroundCanvas: React.FC = () => {
       }
     }
 
-    const initStars = () => {
+    // --- INIT ---
+
+    const initEntities = () => {
+      nebulas = [];
+      for(let i=0; i<config.nebulaCount; i++) nebulas.push(new Nebula());
+
       stars = [];
       for (let i = 0; i < config.starCount; i++) stars.push(new Star());
     };
 
     const animate = () => {
       if (!ctx) return;
+      
+      // Clear with very slight transparency for trail effect (optional, but pure clear is cleaner for this style)
       ctx.clearRect(0, 0, width, height);
       
-      stars.forEach(star => {
+      // 1. Draw Nebulas (Background Layer)
+      // Composite operation to blend them nicely
+      ctx.globalCompositeOperation = 'screen';
+      nebulas.forEach(n => {
+        n.update();
+        n.draw(ctx);
+      });
+      ctx.globalCompositeOperation = 'source-over'; // Reset
+
+      // 2. Draw Stars & Connections
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.lineWidth = 0.5;
+      
+      stars.forEach((star, i) => {
         star.update();
         star.draw(ctx);
+        
+        // Connect nearby stars
+        for (let j = i + 1; j < stars.length; j++) {
+            const dx = stars[i].x - stars[j].x;
+            const dy = stars[i].y - stars[j].y;
+            const dist = dx*dx + dy*dy; // squared distance
+            if (dist < config.connectionDistance * config.connectionDistance) {
+                ctx.beginPath();
+                ctx.moveTo(stars[i].x, stars[i].y);
+                ctx.lineTo(stars[j].x, stars[j].y);
+                ctx.stroke();
+            }
+        }
       });
 
-      // Connections
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-      ctx.lineWidth = 0.5;
-      for (let i = 0; i < stars.length; i++) {
-        for (let j = i + 1; j < stars.length; j++) {
-          const dx = stars[i].x - stars[j].x;
-          const dy = stars[i].y - stars[j].y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < config.connectionDistance) {
-            ctx.beginPath();
-            ctx.moveTo(stars[i].x, stars[i].y);
-            ctx.lineTo(stars[j].x, stars[j].y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      // Meteors
+      // 3. Draw Meteors
       if (Math.random() < config.meteorChance) meteors.push(new Meteor());
+      
       meteors.forEach((m, i) => {
         m.update();
         m.draw(ctx);
@@ -173,12 +268,13 @@ const BackgroundCanvas: React.FC = () => {
         canvas.width = width;
         canvas.height = height;
       }
-      config.starCount = width < 768 ? 50 : 120;
-      initStars();
+      config.starCount = width < 768 ? 60 : 150;
+      initEntities();
     };
 
     window.addEventListener('resize', handleResize);
     handleResize();
+    initEntities();
     animate();
 
     return () => {
@@ -190,7 +286,8 @@ const BackgroundCanvas: React.FC = () => {
   return (
     <canvas 
       ref={canvasRef} 
-      className="fixed top-0 left-0 w-full h-full z-0 pointer-events-none"
+      className="fixed top-0 left-0 w-full h-full -z-10 pointer-events-none"
+      style={{ background: 'black', zIndex: -1 }} 
     />
   );
 };
